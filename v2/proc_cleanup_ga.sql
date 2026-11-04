@@ -30,7 +30,7 @@ for
 select 
 	cast(job_id as nvarchar(50)),
 	job_id, 
-	parallel_degree
+	case when isnull(parallel_degree,0) = 0 then 1 else parallel_degree end
 from ga_status  
 where 
 	(cast(job_id as nvarchar(50))=@job_id)
@@ -42,15 +42,11 @@ for read only;
 open job_cur 
 fetch next from job_cur into @jobid_tx,@job_id,@degree;
 
-print 'delete jobs'
-
 while @@fetch_status = 0 
 begin --while job_Cur
-	if exists (
-		select 1 from msdb.dbo.sysjobs sj where sj.name like 'job_'+@jobid_tx +'._'
-	)
+	print 'delete job ' + @jobid_tx
+	if exists (select 1 from msdb.dbo.sysjobs sj where sj.name like 'job_'+@jobid_tx +'._')
 	begin
-		print @jobid_tx
 		set @thread = 0 ;
 
 		while @thread < @degree
@@ -67,7 +63,7 @@ begin --while job_Cur
 		end--while
 	end
 
-	print 'delete ga_logs'
+	print 'delete ga_logs for '+@jobid_tx
 	delete ga_log where cast(job_id as nvarchar(50))=@jobid_tx;
 
 
@@ -76,13 +72,13 @@ begin --while job_Cur
 
 	declare schedule_cur cursor
 	for select schedule_id from msdb.dbo.sysschedules ss where ss.name = @shedulename for read only;
+
 	open schedule_cur 
 	fetch next from schedule_cur into @sheduleid;
 
-	print 'delete schedules'
 	while @@fetch_status = 0 
 	begin
-		print @shedulename
+		print 'delete schedule ' + @shedulename + ', id:' + cast(@sheduleid as nvarchar(20))
 		EXEC msdb.dbo.sp_delete_schedule @schedule_id = @sheduleid;  
 
 		fetch next from schedule_cur into @sheduleid;
