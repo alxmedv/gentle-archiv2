@@ -1,21 +1,30 @@
 exec dbo.invoke_ga
-	@job_name = 'ga_Wanted',
+	@job_name = 'ga_Wanted_x2',
+	@job_proc = 'prga_Wanted',
 	@pTableName = 'bricklink.dbo.Wanted',
 	@pKeyCol = 'wantedID',
-	@pNbOfRowsToMove = 100000,
+	@pNbOfRowsToMove = 10000000,
+	@pContJob = 1,
+	@degree = 8,
 	@async = 1
 
---delete ga_status where job_id='6642A421-A7E6-4697-ACC2-32BD8A95B391'
+--exec [dbo].[populate_ga] 'ga_Wanted', 1
 
-exec dbo.create_ga_job 'ga_Wanted'
+exec dbo.create_ga_job 'ga_Wanted_x2'
 
-exec [dbo].[populate_ga] 'ga_Wanted'
+exec dbo.stop_ga 'ga_Wanted_x2'
 
-exec [dbo].[cleanup_ga] @status = 'completed'--'ga_Wanted'
 
-exec [dbo].[cleanup_ga] @status = 'failed'--'ga_Wanted'
+exec [dbo].[cleanup_ga] @status = 'orphaned'
 
-exec [dbo].[cleanup_ga] @job_id='C6268B82-7E4B-45E5-ADB0-BC1C073E2BF9'
+exec [dbo].[cleanup_ga] @status = 'completed'
+
+exec [dbo].[cleanup_ga] @status = 'stopped'
+
+exec [dbo].[cleanup_ga] @status = 'failed'
+
+exec [dbo].[cleanup_ga] @job_id='EFF8DBFD-9251-4860-AED4-B944BE9F41FD'
+
 
 
 
