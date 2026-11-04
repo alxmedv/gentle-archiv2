@@ -10,9 +10,29 @@ create or alter procedure [dbo].[cleanup_ga]
 	@job_name nvarchar(200) = NULL, @job_id nvarchar(50) = NULL, @status nvarchar(40) = NULL
 as
 
+declare @stmt nvarchar(max);
+
 if @status = 'orphaned'
 begin
-	delete ga_log where job_id not in (	select job_id from ga_status ) or job_id is null
+	--delete orphaned logs
+	delete ga_log where job_id not in (	select job_id from ga_status ) or job_id is null;
+	
+	--drop orphaned index tables
+	declare cur_orph_jobindex cursor for 
+		select 'drop table "'+name+'"' from sys.tables 
+		where name like 'ga_jobindex_%'
+		and name not in (select 'ga_jobindex_' + cast(job_id as nvarchar(200)) from ga_status)
+	open cur_orph_jobindex 
+	fetch cur_orph_jobindex into @stmt;
+	while @@FETCH_STATUS=0
+	begin
+		print @stmt
+		exec @stmt
+		fetch cur_orph_jobindex into @stmt
+	end
+	close cur_orph_jobindex;
+	deallocate cur_orph_jobindex;
+	
 	return
 end
 
@@ -63,10 +83,6 @@ begin --while job_Cur
 		end--while
 	end
 
-	print 'delete ga_logs for '+@jobid_tx
-	delete ga_log where cast(job_id as nvarchar(50))=@jobid_tx;
-
-
 	declare @shedulename nvarchar(100) = 'jobSchedule_' + @jobid_tx;
 	declare @sheduleid int;
 
@@ -85,6 +101,15 @@ begin --while job_Cur
 	end
 	close schedule_cur;
 	deallocate schedule_cur;
+
+	select @stmt = 'drop table "'+name+'"' from sys.tables 
+	where name = 'ga_jobindex_' + @jobid_tx
+	print @stmt
+	if @stmt is not null
+		exec @stmt
+	
+	print 'delete ga_logs for '+@jobid_tx
+	delete ga_log where cast(job_id as nvarchar(50))=@jobid_tx;
 
 	update ga_status set status_desc = status_desc + '(x)'
 	where job_id = @job_id;
