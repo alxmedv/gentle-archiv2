@@ -22,6 +22,10 @@ if not exists (select 1 from sys.tables where name = 'ga_config')
 		srcTableName varchar(200) not null, srckeycol varchar(200) not null, 
 		trgTableName varchar(200) not null, params nvarchar(max)
 	);
+
+if not exists (select 1 from sys.tables where name = 'ga_log') 
+	create table ga_log (logid int identity(1,1), job_id uniqueidentifier, 
+	ts datetime default getdate(), job_name nvarchar(200), msg nvarchar(max), parm bigint)
 go
 
 /*
@@ -68,7 +72,7 @@ select top 1
 from ga_status 
 where job_name = @job_name 
 	and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
-	and replace(status_desc,'(x)','') not in ('failed','completed','stopped')
+	and replace(status_desc,'(x)','') not in ('failed','completed','stopped','failed init')
 order by start_time desc
 	
 if @job_id is null
@@ -98,10 +102,6 @@ begin
 	@est_count,@comm_count,@pContJob,@last_keyid);
 
 	begin try
-		--test if query is executable -- mostly testing @params_txt and @pTableName
-		select @stmt = N'select @ec = count(*) from '+@pTableName+' where 1=0 '+@params_txt
-		execute sp_executesql @stmt, @params = N'@ec bigint out', @ec = @est_count output;
-		
 		--test target table
 		if object_id(@pTrgTableName, N'U') is null
 		raiserror('Configured target table does not exist', 16, 1);
@@ -110,6 +110,27 @@ begin
 		--test SP
 		if object_id(@job_proc, N'P') is null 
 		raiserror('Configured stored procedure does not exist', 16, 1);
+
+		if object_id('ga_jobindex_' + cast(@job_id as nvarchar(200))) is not null
+		raiserror('The job index table exists', 16, 1);
+
+		--test if query is executable -- mostly testing @params_txt and @pTableName
+		--select @stmt = N'select @ec = count(*) from '+@pTableName+' where 1=0 '+@params_txt
+		--execute sp_executesql @stmt, @params = N'@ec bigint out', @ec = @est_count output;
+
+		select @stmt =
+			'select top ('+cast(@pNbOfRowsToMove as nvarchar(20))+') '
+			+ @pKeyCol + ' as rowkey,'
+			+ ' row_number() over (order by '+@pKeyCol+' asc ) as rownum'
+			+ ' into "ga_jobindex_' + cast(@job_id as nvarchar(200))+'"'
+			+ ' from '+@pTableName+' with (nolock) where 1=1 ' + isnull(@params_txt,'')
+			+ ' and '+@pKeyCol+'>'+cast(@last_keyid as varchar(20))
+			+ '; set @ec = @@rowcount;'
+		if @silent = 0
+		select @stmt as stmt
+		
+		execute sp_executesql @stmt, @params = N'@ec bigint out', @ec = @est_count output;
+		update ga_status set estimated_rows = @est_count where job_id = @job_id;
 		
 		if @silent = 0
 		print 'Init success'
