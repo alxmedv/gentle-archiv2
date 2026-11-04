@@ -31,10 +31,6 @@ declare @contJob bit;
 
 declare @batchkeys AS gaBatchKeyType;
 
-if not exists (select 1 from sys.tables where name = 'ga_log') 
-create table ga_log (logid int identity(1,1), job_id uniqueidentifier, 
-ts datetime default getdate(), job_name nvarchar(200), msg nvarchar(max), parm bigint)
-
 drop table if exists #jobkeys;
 create table #jobkeys (rowkey int primary key clustered);
 
@@ -81,12 +77,9 @@ if @degree>0
 
 --Enumerate job volume
 select @enumsqlstmt =
-	'select top ('+cast(@req_count as nvarchar(20))+') '
-	+ @srckeycol
-	+ ' from '+@srctable+' with (nolock) where 1=1 ' + isnull(@params_txt,'')
-	+ ' and '+@srckeycol+'>'+cast(@lastMaxKey as varchar(20))
+	'select rowkey from "ga_jobindex_' + cast(@job_id as nvarchar(200))+'" where 1=1'
 	+ case when @degree > 0 and @threadno is not null 
-		then ' and '+@srckeycol+'%'+cast(@degree as nvarchar(5))+'='+cast(@threadno as nvarchar(5))
+		then ' and rownum%'+cast(@degree as nvarchar(5))+'='+cast(@threadno as nvarchar(5))
 		else '' end;
 
 truncate table #jobkeys;
@@ -129,10 +122,9 @@ begin --while
 		exec sp_executesql @enumsqlstmt, 
 			N'@parkeys gaBatchKeyType READONLY, @rows_affected bigint OUT', 
 			@batchkeys, @rowsaffect out;
-		--exec dbo.prga_Wanted @batchkeys, @rowsaffect OUT;
 
 		if @debug = 1
-		select @rowsaffect rowsaffect, @com_count com_count, count(*) count_batchkeys from @batchkeys
+			select @rowsaffect rowsaffect, @com_count com_count, @lastMaxKey as lastMaxKey
 
 		if @rowsaffect <> @com_count
 			throw  50001, N'insert rowcount mismatch with expected commit count', 1
