@@ -43,16 +43,14 @@ create or alter procedure [dbo].[invoke_ga]
 	@pTrgTableName sysname = NULL,
 	@pWhereAnd nvarchar(max) = NULL,
 	@pNbOfRowsToMove bigint = NULL,
-	@pContJob bit = 1,
-	--@degree tinyint = 0,
+	@pContJob bit = 0,
+	@degree tinyint = 0,
 	@async bit = 0,
 	@silent bit = 0
 	
 as
 
 set nocount on
-
-declare @degree tinyint = 0
 
 declare @job_id uniqueidentifier;
 declare @srcTableName sysname;
@@ -78,30 +76,41 @@ order by start_time desc
 if @job_id is null
 begin
 
-	--if config is not created - very first invoke
-	if not exists (select 1 from ga_config where job_name = @job_name 
-		and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
-		) 
-		insert into ga_config (job_name, jobProc, srcTableName, srckeycol, trgTableName, params)
-		values (@job_name, @job_proc, @pTableName, @pKeyCol, @pTrgTableName, @params_txt);
-
-	if @pContJob = 1 -- if continued job, get the last key id
-	select top 1 @last_keyid = last_keyid from ga_status
-	where cont_job = 1 and job_name = @job_name 
-		and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
-		and replace(status_desc,'(x)','') in ('failed','completed','stopped')
-	order by start_time desc
-
-	select @job_id = newid()
-
-	insert into ga_status (job_id,start_time,job_name,status_desc,parallel_degree,
-	job_async,params,requested_rows,
-	estimated_rows,committed_rows,cont_job,last_keyid) 
-	values (@job_id,getdate(),@job_name,'init',@degree,
-	@async,@params_txt,@pNbOfRowsToMove,
-	@est_count,@comm_count,@pContJob,@last_keyid);
-
 	begin try
+
+		--if config is not created - very first invoke
+		if not exists (select 1 from ga_config where job_name = @job_name) 
+			insert into ga_config (job_name, jobProc, srcTableName, srckeycol, trgTableName, params)
+			values (@job_name, @job_proc, @pTableName, @pKeyCol, @pTrgTableName, @params_txt);
+		else 
+		begin
+			if exists (
+			select 1 from ga_config where job_name = @job_name
+			and (
+			hashbytes('SHA2_256',isnull(params,'')) != hashbytes('SHA2_256',isnull(@params_txt,''))
+			or jobProc!=@job_proc or srcTableName!=@pTableName or srckeycol!=@pKeyCol
+			or trgTableName!=@pTrgTableName)
+			)
+			raiserror('Configuration mismatch for the job name', 16, 1);
+		end
+
+
+		if @pContJob = 1 -- if continued job, get the last key id
+		select top 1 @last_keyid = last_keyid from ga_status
+		where cont_job = 1 and job_name = @job_name 
+			and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
+			and replace(status_desc,'(x)','') in ('failed','completed','stopped')
+		order by start_time desc
+
+		select @job_id = newid()
+
+		insert into ga_status (job_id,start_time,job_name,status_desc,parallel_degree,
+		job_async,params,requested_rows,
+		estimated_rows,committed_rows,cont_job,last_keyid) 
+		values (@job_id,getdate(),@job_name,'init',@degree,
+		@async,@params_txt,@pNbOfRowsToMove,
+		@est_count,@comm_count,@pContJob,@last_keyid);
+
 		--test target table
 		if object_id(@pTrgTableName, N'U') is null
 		raiserror('Configured target table does not exist', 16, 1);
@@ -114,18 +123,20 @@ begin
 		if object_id('ga_jobindex_' + cast(@job_id as nvarchar(200))) is not null
 		raiserror('The job index table exists', 16, 1);
 
-		--test if query is executable -- mostly testing @params_txt and @pTableName
-		--select @stmt = N'select @ec = count(*) from '+@pTableName+' where 1=0 '+@params_txt
-		--execute sp_executesql @stmt, @params = N'@ec bigint out', @ec = @est_count output;
-
 		select @stmt =
-			'select top ('+cast(@pNbOfRowsToMove as nvarchar(20))+') '
+			'select '
+			+ case when isnull(@pNbOfRowsToMove,0) > 0
+				then 'top ('+cast(@pNbOfRowsToMove as nvarchar(20))+') ' else '' end
 			+ @pKeyCol + ' as rowkey,'
 			+ ' row_number() over (order by '+@pKeyCol+' asc ) as rownum'
 			+ ' into "ga_jobindex_' + cast(@job_id as nvarchar(200))+'"'
 			+ ' from '+@pTableName+' with (nolock) where 1=1 ' + isnull(@params_txt,'')
-			+ ' and '+@pKeyCol+'>'+cast(@last_keyid as varchar(20))
+			+ case when isnull(@last_keyid,0) > 0 
+				then ' and '+@pKeyCol+'>'+cast(@last_keyid as varchar(20)) else '' end
 			+ '; set @ec = @@rowcount;'
+		if @stmt is null
+			raiserror('Enumerate statement is NULL', 16, 1);
+
 		if @silent = 0
 		select @stmt as stmt
 		
