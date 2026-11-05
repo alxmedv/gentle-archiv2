@@ -20,7 +20,8 @@ if not exists (select 1 from sys.tables where name = 'ga_config')
 		job_name nvarchar(200) unique, 
 		jobProc varchar(200) not null,
 		srcTableName varchar(200) not null, srckeycol varchar(200) not null, 
-		trgTableName varchar(200) not null, params nvarchar(max)
+		trgTableName varchar(200) not null, params nvarchar(max),
+		comm_rows int
 	);
 
 if not exists (select 1 from sys.tables where name = 'ga_log') 
@@ -28,11 +29,6 @@ if not exists (select 1 from sys.tables where name = 'ga_log')
 	ts datetime default getdate(), job_name nvarchar(200), msg nvarchar(max), parm bigint)
 go
 
-/*
-exec dbo.invoke_ga
-	@pTableName = 'bricklink.dbo.Wanted',
-	@pKeyCol = 'wantedID'
-*/
 
 
 create or alter procedure [dbo].[invoke_ga] 
@@ -43,6 +39,7 @@ create or alter procedure [dbo].[invoke_ga]
 	@pTrgTableName sysname = NULL,
 	@pWhereAnd nvarchar(max) = NULL,
 	@pNbOfRowsToMove bigint = NULL,
+	@pCommRows int = NULL,
 	@pContJob bit = 0,
 	@degree tinyint = 0,
 	@async bit = 0,
@@ -55,6 +52,7 @@ set nocount on
 declare @job_id uniqueidentifier;
 declare @srcTableName sysname;
 declare @params_txt nvarchar(max);
+declare @comm_rows int = isnull(@pCommRows,1000);
 declare @est_count bigint = 0, @comm_count bigint = 0;
 declare @last_keyid bigint = NULL;
 declare @stmt nvarchar(max);
@@ -80,8 +78,8 @@ begin
 
 		--if config is not created - very first invoke
 		if not exists (select 1 from ga_config where job_name = @job_name) 
-			insert into ga_config (job_name, jobProc, srcTableName, srckeycol, trgTableName, params)
-			values (@job_name, @job_proc, @pTableName, @pKeyCol, @pTrgTableName, @params_txt);
+			insert into ga_config (job_name, jobProc, srcTableName, srckeycol, trgTableName, params, comm_rows)
+			values (@job_name, @job_proc, @pTableName, @pKeyCol, @pTrgTableName, @params_txt, @comm_rows);
 		else 
 		begin
 			if exists (
