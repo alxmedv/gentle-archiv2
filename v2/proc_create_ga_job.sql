@@ -18,16 +18,17 @@ select top 1
 	@req_count = requested_rows,
 	@degree = parallel_degree,
 	@async = job_async,
-	@params_txt = params
+	@params_txt = whereand
 from ga_status 
 where job_name = @pjob_name and status_desc in ('init') order by start_time
 
 if @job_id is null or @est_count=0 or (@degree>0 and @async=0)
 begin
 	print 'The requested job cannot be started'
-	print '@job_id='+cast(@job_id as varchar(20))+', @est_count='+cast(@est_count as varchar(10))
+	print '@job_id='+cast(@job_id as varchar(50))+', @est_count='+cast(@est_count as varchar(10))
 	+', @degree='+cast(@degree as varchar(10))+', @async='+cast(@async as varchar(10))
-	update ga_status set status_desc = 'stopped' where job_id = @job_id;
+	update ga_status set status_desc = 'stopped', end_time=getdate()
+	where job_id = @job_id;
 	return;
 end
 
