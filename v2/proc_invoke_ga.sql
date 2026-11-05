@@ -68,8 +68,10 @@ select top 1
 	@job_id = job_id 
 from ga_status 
 where job_name = @job_name 
-	and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
-	and replace(status_desc,'(x)','') not in ('failed','completed','stopped','failed init')
+	and hashbytes('SHA2_256',isnull(params,'')) 
+		= hashbytes('SHA2_256',isnull(@params_txt,''))
+	and replace(status_desc,'(x)','') 
+		not in ('failed','completed','stopped','failed init')
 order by start_time desc
 	
 if @job_id is null
@@ -84,11 +86,16 @@ begin
 		else 
 		begin
 			if exists (
-			select 1 from ga_config where job_name = @job_name
-			and (
-			hashbytes('SHA2_256',isnull(params,'')) != hashbytes('SHA2_256',isnull(@params_txt,''))
-			or jobProc!=@job_proc or srcTableName!=@pTableName or srckeycol!=@pKeyCol
-			or trgTableName!=@pTrgTableName)
+				select 1 from ga_config 
+				where job_name = @job_name
+				and (
+					hashbytes('SHA2_256',isnull(params,'')) != 
+						hashbytes('SHA2_256',isnull(@params_txt,''))
+					or jobProc!=@job_proc 
+					or srcTableName!=@pTableName 
+					or srckeycol!=@pKeyCol
+					or trgTableName!=@pTrgTableName
+				)
 			)
 			raiserror('Configuration mismatch for the job name', 16, 1);
 		end
@@ -103,44 +110,31 @@ begin
 
 		select @job_id = newid()
 
-		insert into ga_status (job_id,start_time,job_name,status_desc,parallel_degree,
-		job_async,params,requested_rows,
-		estimated_rows,committed_rows,cont_job,last_keyid) 
-		values (@job_id,getdate(),@job_name,'init',@degree,
-		@async,@params_txt,@pNbOfRowsToMove,
-		@est_count,@comm_count,@pContJob,@last_keyid);
+		insert into ga_status (
+			job_id,start_time,job_name,status_desc,parallel_degree,
+			job_async,params,requested_rows,estimated_rows,committed_rows,
+			cont_job,last_keyid
+		) 
+		values (
+			@job_id,getdate(),@job_name,'init',@degree,
+			@async,@params_txt,@pNbOfRowsToMove,@est_count,@comm_count,
+			@pContJob,@last_keyid
+		);
 
 		--test target table
 		if object_id(@pTrgTableName, N'U') is null
 		raiserror('Configured target table does not exist', 16, 1);
-		--v.2. test by running an empty batch
 		
 		--test SP
 		if object_id(@job_proc, N'P') is null 
 		raiserror('Configured stored procedure does not exist', 16, 1);
 
-		if object_id('ga_jobindex_' + cast(@job_id as nvarchar(200))) is not null
-		raiserror('The job index table exists', 16, 1);
+		-- exec build job index
+		exec build_jobindex 
+			@job_id, @pNbOfRowsToMove,
+			@pTableName, @pTrgTableName, @pKeyCol, @params_txt,
+			@last_keyid, @silent, @est_count out
 
-		select @stmt =
-			'select '
-			+ case when isnull(@pNbOfRowsToMove,0) > 0
-				then 'top ('+cast(@pNbOfRowsToMove as nvarchar(20))+') ' else '' end
-			+ @pKeyCol + ' as rowkey,'
-			+ ' row_number() over (order by '+@pKeyCol+' asc ) as rownum'
-			+ ' into "ga_jobindex_' + cast(@job_id as nvarchar(200))+'"'
-			+ ' from '+@pTableName+' st with (nolock) where 1=1 ' + isnull(@params_txt,'')
-			+ case when isnull(@last_keyid,0) > 0 
-				then ' and '+@pKeyCol+'>'+cast(@last_keyid as varchar(20)) else '' end
-			+ ' and not exists (select 1 from '+@pTrgTableName+' where '+@pKeyCol+'=st.'+@pKeyCol+')'
-			+ '; set @ec = @@rowcount;'
-		if @stmt is null
-			raiserror('Enumerate statement is NULL', 16, 1);
-
-		if @silent = 0
-		select @stmt as stmt
-		
-		execute sp_executesql @stmt, @params = N'@ec bigint out', @ec = @est_count output;
 		update ga_status set estimated_rows = @est_count where job_id = @job_id;
 		
 		if @silent = 0
