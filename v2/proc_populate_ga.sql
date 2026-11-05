@@ -1,6 +1,6 @@
 USE DBA
 GO
-/****** Object:  StoredProcedure [dbo].[populate_archive]    Script Date: 15-04-2024 18:32:41 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -58,7 +58,8 @@ if @job_id is null return
 select 
 @jobProc = jobProc, 		
 @srctable = srcTableName, 
-@srckeycol = srckeycol  
+@srckeycol = srckeycol,
+@commitsize = isnull(comm_rows, @commitsize)
 from ga_config where job_name = @job_name; 
 
 if @debug = 1
@@ -148,7 +149,8 @@ if @com_count = 0
 if exists (select 1 from ga_status where job_id=@job_id and committed_rows=estimated_rows)
 begin
 	update ga_status 
-	set status_desc = 'completed', last_keyid = cast(@lastMaxKey as nvarchar(20)) where job_id=@job_id
+	set status_desc = 'completed', last_keyid = cast(@lastMaxKey as nvarchar(20)) 
+	where job_id=@job_id
 
 end 
 
