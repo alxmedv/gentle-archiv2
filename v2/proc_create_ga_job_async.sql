@@ -51,7 +51,7 @@ set @shedulename = 'jobSchedule_'+@job_idtx
 if exists (select 1 from msdb.dbo.sysschedules ss where ss.name = @shedulename)  
 raiserror('Requested job schedule exists without job', 16, 1);
 
-select @starttime=cast(replace(convert(nvarchar(10),dateadd(n,1,getdate()),108),':','') as int);
+select @starttime=cast(replace(convert(nvarchar(10),dateadd(SECOND,10,getdate()),108),':','') as int);
 
 print 'create job schedule '+@shedulename
 
@@ -86,7 +86,7 @@ begin --while
 		@retry_interval = 0 ;  
 
 	EXEC msdb.dbo.sp_attach_schedule  
-	   @job_name = @jobname, 
+	   @job_name = @jobname,  
 	   @schedule_name = @shedulename;  
 
 	EXEC msdb.dbo.sp_add_jobserver @job_name = @jobname;  
