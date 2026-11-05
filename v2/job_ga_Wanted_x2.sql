@@ -1,11 +1,11 @@
 USE [msdb]
 GO
 
-/****** Object:  Job [ga_Wanted_x2]    Script Date: 11/5/2026 12:42:02 PM ******/
+/****** Object:  Job [ga_Wanted_x2]    Script Date: 11/5/2026 2:45:18 PM ******/
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
-/****** Object:  JobCategory [Database Maintenance]    Script Date: 11/5/2026 12:42:02 PM ******/
+/****** Object:  JobCategory [Database Maintenance]    Script Date: 11/5/2026 2:45:18 PM ******/
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'Database Maintenance' AND category_class=1)
 BEGIN
 EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Database Maintenance'
@@ -25,8 +25,8 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'ga_Wanted_x2',
 		@category_name=N'Database Maintenance', 
 		@owner_login_name=N'EC2AMAZ-N9M8TVD\bl-user', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Step1]    Script Date: 11/5/2026 12:42:03 PM ******/
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step1', 
+/****** Object:  Step [Step1 - Initialize Job]    Script Date: 11/5/2026 2:45:19 PM ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step1 - Initialize Job', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=3, 
@@ -48,11 +48,11 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step1',
 		@database_name=N'DBA', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Step2]    Script Date: 11/5/2026 12:42:03 PM ******/
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step2', 
+/****** Object:  Step [Step2 - Cleanup Old and Start New]    Script Date: 11/5/2026 2:45:19 PM ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step2 - Cleanup Old and Start New', 
 		@step_id=2, 
 		@cmdexec_success_code=0, 
-		@on_success_action=1, 
+		@on_success_action=3, 
 		@on_success_step_id=0, 
 		@on_fail_action=2, 
 		@on_fail_step_id=0, 
@@ -63,6 +63,57 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step2',
 exec [dbo].[cleanup_ga] @status = ''failed''
 exec dbo.create_ga_job ''ga_Wanted_x2''', 
 		@database_name=N'DBA', 
+		@flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+/****** Object:  Step [Step3 - Adjust job interval]    Script Date: 11/5/2026 2:45:19 PM ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step3 - Adjust job interval', 
+		@step_id=3, 
+		@cmdexec_success_code=0, 
+		@on_success_action=1, 
+		@on_success_step_id=0, 
+		@on_fail_action=2, 
+		@on_fail_step_id=0, 
+		@retry_attempts=0, 
+		@retry_interval=0, 
+		@os_run_priority=0, @subsystem=N'TSQL', 
+		@command=N'declare @agent_job_name varchar(50);
+declare @new_interval_min int;
+declare @schedule_id int;
+
+SELECT @agent_job_name = name FROM msdb.dbo.sysjobs WHERE job_id = CONVERT(UNIQUEIDENTIFIER,
+    ''$(ESCAPE_NONE(JOBID))'');
+
+select top 1 @new_interval_min = datediff(minute,start_time,end_time)+1
+from dba..ga_status gs 
+where status_desc in (''completed'',''completed(x)'')
+order by start_time desc
+
+SELECT
+    @schedule_id = s.schedule_id,
+    @new_interval_min = case when abs(@new_interval_min-s.freq_subday_interval)>1
+    then @new_interval_min else null end
+FROM msdb.dbo.sysjobs j
+JOIN msdb.dbo.sysjobschedules js
+    ON j.job_id = js.job_id
+JOIN msdb.dbo.sysschedules s
+    ON js.schedule_id = s.schedule_id
+WHERE j.name = @agent_job_name
+and s.freq_type = 4 -- 4 = Daily
+and s.freq_subday_type = 4; -- 4 = Minutes
+
+
+if @schedule_id is not null and @new_interval_min is not null
+begin
+    print ''update schedule interval to ''+cast(@new_interval_min as varchar(10))
+    EXEC dbo.sp_update_schedule
+        @schedule_id = @schedule_id,
+        @freq_subday_type = 4,    
+        @freq_subday_interval = @new_interval_min ; 
+end
+else 
+    print ''no schedule update''
+', 
+		@database_name=N'msdb', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
