@@ -86,7 +86,7 @@ begin --while
 		@retry_interval = 0 ;  
 
 	EXEC msdb.dbo.sp_attach_schedule  
-	   @job_name = @jobname,  
+	   @job_name = @jobname, 
 	   @schedule_name = @shedulename;  
 
 	EXEC msdb.dbo.sp_add_jobserver @job_name = @jobname;  
