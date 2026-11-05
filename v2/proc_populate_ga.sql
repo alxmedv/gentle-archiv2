@@ -38,7 +38,7 @@ begin try
 
 
 drop table if exists #jobkeys;
-create table #jobkeys (rowkey int primary key clustered);
+create table #jobkeys (rowkey bigint primary key clustered);
 
 select top 1 
 	@job_id = job_id, 
