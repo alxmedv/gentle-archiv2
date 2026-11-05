@@ -30,7 +30,7 @@ select top 1
 	@req_count = requested_rows,
 	@degree = parallel_degree,
 	@async = job_async,
-	@params_txt = params
+	@params_txt = whereand
 from ga_status 
 where job_id = @job_id and status_desc in ('init') order by start_time
 
