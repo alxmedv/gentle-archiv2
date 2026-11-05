@@ -8,6 +8,7 @@ if not exists (select 1 from sys.tables where name = 'ga_status')
 	create table ga_status (
 		job_id uniqueidentifier not null, job_part tinyint, 
 		start_time datetime default getdate(), job_name nvarchar(200) not null, 
+		end_time datetime, 
 		parallel_degree smallint, 
 		job_async bit, 
 		params nvarchar(max), status_desc nvarchar(20),  
