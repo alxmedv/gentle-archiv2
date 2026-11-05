@@ -100,7 +100,7 @@ begin --while job_Cur
 		fetch next from schedule_cur into @sheduleid;
 	end
 	close schedule_cur;
-	deallocate schedule_cur;
+	deallocate schedule_cur; 
 	
 	set @stmt=NULL;
 	select @stmt = 'drop table ['+name+']' from sys.tables 
