@@ -11,7 +11,7 @@ if not exists (select 1 from sys.tables where name = 'ga_status')
 		end_time datetime, 
 		parallel_degree smallint, 
 		job_async bit, 
-		params nvarchar(max), status_desc nvarchar(20),  
+		whereand nvarchar(max), status_desc nvarchar(20),  
 		requested_rows bigint, estimated_rows bigint, committed_rows bigint, 
 		cont_job bit, last_keyid nvarchar(20) 
 	);
@@ -19,9 +19,9 @@ if not exists (select 1 from sys.tables where name = 'ga_status')
 if not exists (select 1 from sys.tables where name = 'ga_config') 
 	create table ga_config (
 		job_name nvarchar(200) unique, 
-		jobProc varchar(200) not null,
-		srcTableName varchar(200) not null, srckeycol varchar(200) not null, 
-		trgTableName varchar(200) not null, params nvarchar(max),
+		job_proc varchar(200) not null,
+		src_tbname varchar(200) not null, src_keycol varchar(200) not null, 
+		trg_tbname varchar(200) not null, whereand nvarchar(max),
 		comm_rows int
 	);
 
@@ -35,8 +35,8 @@ go
 create or alter procedure [dbo].[invoke_ga] 
 	@pTableName sysname,
 	@pKeyCol sysname, 
-	@job_name sysname = NULL, 
-	@job_proc sysname = NULL, 
+	@pJobName sysname = NULL, 
+	@pJobProc sysname = NULL, 
 	@pTrgTableName sysname = NULL,
 	@pWhereAnd nvarchar(max) = NULL,
 	@pNbOfRowsToMove bigint = NULL,
@@ -50,17 +50,19 @@ as
 
 set nocount on
 
+declare @job_name sysname = @pJobName, 
+		@job_proc sysname = @pJobProc
 declare @job_id uniqueidentifier;
-declare @srcTableName sysname;
+declare @src_tbname sysname;
 declare @params_txt nvarchar(max);
 declare @comm_rows int = isnull(@pCommRows,1000);
 declare @est_count bigint = 0, @comm_count bigint = 0;
 declare @last_keyid bigint = NULL;
 declare @stmt nvarchar(max);
 
-set @srcTableName = PARSENAME(@pTableName, 1);
-set @job_name = isnull(@job_name,'ga_'+@srcTableName);
-set @pTrgTableName = isnull(@pTrgTableName,replace(@pTableName,@srcTableName,'ga_'+@srcTableName));
+set @src_tbname = PARSENAME(@pTableName, 1);
+set @job_name = isnull(@job_name,'ga_'+@src_tbname);
+set @pTrgTableName = isnull(@pTrgTableName,replace(@pTableName,@src_tbname,'ga_'+@src_tbname));
 set @job_proc = isnull(@job_proc,'pr'+@job_name);
 set @params_txt = @pWhereAnd 
 
@@ -68,7 +70,7 @@ select top 1
 	@job_id = job_id 
 from ga_status 
 where job_name = @job_name 
-	and hashbytes('SHA2_256',isnull(params,'')) 
+	and hashbytes('SHA2_256',isnull(whereand,'')) 
 		= hashbytes('SHA2_256',isnull(@params_txt,''))
 	and replace(status_desc,'(x)','') 
 		not in ('failed','completed','stopped','failed init')
@@ -81,7 +83,7 @@ begin
 
 		--if config is not created - very first invoke
 		if not exists (select 1 from ga_config where job_name = @job_name) 
-			insert into ga_config (job_name, jobProc, srcTableName, srckeycol, trgTableName, params, comm_rows)
+			insert into ga_config (job_name, job_proc, src_tbname, src_keycol, trg_tbname, whereand, comm_rows)
 			values (@job_name, @job_proc, @pTableName, @pKeyCol, @pTrgTableName, @params_txt, @comm_rows);
 		else 
 		begin
@@ -89,12 +91,12 @@ begin
 				select 1 from ga_config 
 				where job_name = @job_name
 				and (
-					hashbytes('SHA2_256',isnull(params,'')) != 
+					hashbytes('SHA2_256',isnull(whereand,'')) != 
 						hashbytes('SHA2_256',isnull(@params_txt,''))
-					or jobProc!=@job_proc 
-					or srcTableName!=@pTableName 
-					or srckeycol!=@pKeyCol
-					or trgTableName!=@pTrgTableName
+					or job_proc!=@job_proc 
+					or src_tbname!=@pTableName 
+					or src_keycol!=@pKeyCol
+					or trg_tbname!=@pTrgTableName
 				)
 			)
 			raiserror('Configuration mismatch for the job name', 16, 1);
@@ -104,7 +106,7 @@ begin
 		if @pContJob = 1 -- if continued job, get the last key id
 		select top 1 @last_keyid = last_keyid from ga_status
 		where cont_job = 1 and job_name = @job_name 
-			and hashbytes('SHA2_256',isnull(params,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
+			and hashbytes('SHA2_256',isnull(whereand,'')) = hashbytes('SHA2_256',isnull(@params_txt,''))
 			and replace(status_desc,'(x)','') in ('failed','completed','stopped')
 		order by start_time desc
 
@@ -112,7 +114,7 @@ begin
 
 		insert into ga_status (
 			job_id,start_time,job_name,status_desc,parallel_degree,
-			job_async,params,requested_rows,estimated_rows,committed_rows,
+			job_async,whereand,requested_rows,estimated_rows,committed_rows,
 			cont_job,last_keyid
 		) 
 		values (
