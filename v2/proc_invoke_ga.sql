@@ -128,9 +128,10 @@ begin
 			+ @pKeyCol + ' as rowkey,'
 			+ ' row_number() over (order by '+@pKeyCol+' asc ) as rownum'
 			+ ' into "ga_jobindex_' + cast(@job_id as nvarchar(200))+'"'
-			+ ' from '+@pTableName+' with (nolock) where 1=1 ' + isnull(@params_txt,'')
+			+ ' from '+@pTableName+' st with (nolock) where 1=1 ' + isnull(@params_txt,'')
 			+ case when isnull(@last_keyid,0) > 0 
 				then ' and '+@pKeyCol+'>'+cast(@last_keyid as varchar(20)) else '' end
+			+ ' and not exists (select 1 from '+@pTrgTableName+' where '+@pKeyCol+'=st.'+@pKeyCol+')'
 			+ '; set @ec = @@rowcount;'
 		if @stmt is null
 			raiserror('Enumerate statement is NULL', 16, 1);
