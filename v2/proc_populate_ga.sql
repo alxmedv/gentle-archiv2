@@ -149,7 +149,9 @@ if @com_count = 0
 if exists (select 1 from ga_status where job_id=@job_id and committed_rows=estimated_rows)
 begin
 	update ga_status 
-	set status_desc = 'completed', last_keyid = cast(@lastMaxKey as nvarchar(20)) 
+	set status_desc = 'completed', 
+	end_time = getdate(),
+	last_keyid = cast(@lastMaxKey as nvarchar(20)) 
 	where job_id=@job_id
 
 end 
