@@ -24,6 +24,7 @@ GO
 --into bricklink.[dbo].[ga_Wanted]
 --from bricklink.[dbo].[Wanted] with (nolock)
 --where 1=0
+--CREATE INDEX [IX_ga_Wanted_1] ON [dbo].[ga_Wanted] ([wantedID])
 
 
 --select count(*) from bricklink.[dbo].[ga_Wanted]
