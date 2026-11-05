@@ -1,11 +1,11 @@
 USE [msdb]
 GO
 
-/****** Object:  Job [ga_Wanted_x2]    Script Date: 11/5/2026 2:45:18 PM ******/
+/****** Object:  Job [ga_Wanted_x2]    Script Date: 11/5/2026 4:03:33 PM ******/
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
-/****** Object:  JobCategory [Database Maintenance]    Script Date: 11/5/2026 2:45:18 PM ******/
+/****** Object:  JobCategory [Database Maintenance]    Script Date: 11/5/2026 4:03:33 PM ******/
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'Database Maintenance' AND category_class=1)
 BEGIN
 EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Database Maintenance'
@@ -25,7 +25,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'ga_Wanted_x2',
 		@category_name=N'Database Maintenance', 
 		@owner_login_name=N'EC2AMAZ-N9M8TVD\bl-user', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Step1 - Initialize Job]    Script Date: 11/5/2026 2:45:19 PM ******/
+/****** Object:  Step [Step1 - Initialize Job]    Script Date: 11/5/2026 4:03:33 PM ******/
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step1 - Initialize Job', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
@@ -48,7 +48,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step1 - 
 		@database_name=N'DBA', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Step2 - Cleanup Old and Start New]    Script Date: 11/5/2026 2:45:19 PM ******/
+/****** Object:  Step [Step2 - Cleanup Old and Start New]    Script Date: 11/5/2026 4:03:33 PM ******/
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step2 - Cleanup Old and Start New', 
 		@step_id=2, 
 		@cmdexec_success_code=0, 
@@ -65,7 +65,7 @@ exec dbo.create_ga_job ''ga_Wanted_x2''',
 		@database_name=N'DBA', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Step3 - Adjust job interval]    Script Date: 11/5/2026 2:45:19 PM ******/
+/****** Object:  Step [Step3 - Adjust job interval]    Script Date: 11/5/2026 4:03:33 PM ******/
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step3 - Adjust job interval', 
 		@step_id=3, 
 		@cmdexec_success_code=0, 
@@ -76,12 +76,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Step3 - 
 		@retry_attempts=0, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
-		@command=N'declare @agent_job_name varchar(50);
+		@command=N'declare @agent_job_name varchar(50) = N''$(ESCAPE_SQUOTE(JOBNAME))'';
 declare @new_interval_min int;
 declare @schedule_id int;
-
-SELECT @agent_job_name = name FROM msdb.dbo.sysjobs WHERE job_id = CONVERT(UNIQUEIDENTIFIER,
-    ''$(ESCAPE_NONE(JOBID))'');
 
 select top 1 @new_interval_min = datediff(minute,start_time,end_time)+1
 from dba..ga_status gs 
@@ -140,5 +137,4 @@ QuitWithRollback:
     IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
 EndSave:
 GO
-
 
