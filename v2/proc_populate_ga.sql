@@ -27,8 +27,8 @@ declare @commitsize int = 1000
 declare @rowsaffect int = 0
 
 declare @srctable nvarchar(200);
-declare @srckeycol nvarchar(200);
-declare @jobProc nvarchar(200);
+declare @src_keycol nvarchar(200);
+declare @job_proc nvarchar(200);
 declare @enumsqlstmt nvarchar(max);
 declare @contJob bit;
 
@@ -47,7 +47,7 @@ select top 1
 	@req_count = requested_rows,
 	@degree = parallel_degree, 
 	@async = job_async,
-	@params_txt = params
+	@params_txt = whereand
 from ga_status 
 where job_name = @job_name 
 	and (status_desc in ('init') or (parallel_degree > 0 and status_desc in ('run')))
@@ -56,9 +56,9 @@ order by start_time
 if @job_id is null return
 
 select 
-@jobProc = jobProc, 		
-@srctable = srcTableName, 
-@srckeycol = srckeycol,
+@job_proc = job_proc, 		
+@srctable = src_tbname, 
+@src_keycol = src_keycol,
 @commitsize = isnull(comm_rows, @commitsize)
 from ga_config where job_name = @job_name; 
 
@@ -69,10 +69,10 @@ select @job_id as job_id,
 	@req_count as requested_rows,
 	@degree as parallel_degree,
 	@async as job_async,
-	@params_txt as params,
-	@jobProc as jobProc, 		
-	@srctable as srcTableName, 
-	@srckeycol as srckeycol  
+	@params_txt as whereand,
+	@job_proc as job_proc, 		
+	@srctable as src_tbname, 
+	@src_keycol as src_keycol  
 
 		
 update ga_status 
@@ -118,7 +118,7 @@ begin --while
 
 		--populate target table
 		begin transaction;
-		set @enumsqlstmt = @jobProc + ' @parkeys, @rows_affected OUT'
+		set @enumsqlstmt = @job_proc + ' @parkeys, @rows_affected OUT'
 
 		exec sp_executesql @enumsqlstmt, 
 			N'@parkeys gaBatchKeyType READONLY, @rows_affected bigint OUT', 
@@ -163,7 +163,7 @@ begin catch
 		rollback transaction;
 	
 	insert into ga_log (job_id,parm,msg) 
-	values (@job_id, @threadno, 'job failed : '+ERROR_MESSAGE()+', lastid='+cast(@lastMaxKey as nvarchar(20)));
+	values (@job_id, @threadno, 'job failed : '+error_message()+', lastid='+cast(@lastMaxKey as nvarchar(20)));
 
 	update ga_status 
 	set status_desc = 'failed' where job_id=@job_id
