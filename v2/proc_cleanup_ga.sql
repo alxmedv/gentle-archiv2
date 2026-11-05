@@ -19,7 +19,7 @@ begin
 	
 	--drop orphaned index tables
 	declare cur_orph_jobindex cursor for 
-		select 'drop table ['+name+']' from sys.tables 
+		select N'drop table ['+name+']' from sys.tables 
 		where name like 'ga_jobindex_%'
 		and name not in (select 'ga_jobindex_' + cast(job_id as nvarchar(200)) from ga_status)
 	open cur_orph_jobindex 
@@ -27,7 +27,7 @@ begin
 	while @@FETCH_STATUS=0
 	begin
 		print @stmt
-		exec @stmt
+		exec sp_executesql @stmt
 		fetch cur_orph_jobindex into @stmt
 	end
 	close cur_orph_jobindex;
@@ -100,7 +100,7 @@ begin --while job_Cur
 		fetch next from schedule_cur into @sheduleid;
 	end
 	close schedule_cur;
-	deallocate schedule_cur; 
+	deallocate schedule_cur;
 	
 	set @stmt=NULL;
 	select @stmt = 'drop table ['+name+']' from sys.tables 
