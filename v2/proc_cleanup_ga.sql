@@ -1,6 +1,6 @@
 USE DBA
 GO
-/****** Object:  StoredProcedure [dbo].[delete_job]    Script Date: 15-04-2024 18:30:58 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -19,7 +19,7 @@ begin
 	
 	--drop orphaned index tables
 	declare cur_orph_jobindex cursor for 
-		select 'drop table "'+name+'"' from sys.tables 
+		select 'drop table ['+name+']' from sys.tables 
 		where name like 'ga_jobindex_%'
 		and name not in (select 'ga_jobindex_' + cast(job_id as nvarchar(200)) from ga_status)
 	open cur_orph_jobindex 
@@ -101,12 +101,13 @@ begin --while job_Cur
 	end
 	close schedule_cur;
 	deallocate schedule_cur;
-
-	select @stmt = 'drop table "'+name+'"' from sys.tables 
+	
+	set @stmt=NULL;
+	select @stmt = 'drop table ['+name+']' from sys.tables 
 	where name = 'ga_jobindex_' + @jobid_tx
 	print @stmt
 	if @stmt is not null
-		exec @stmt
+		exec sp_executesql @stmt
 	
 	print 'delete ga_logs for '+@jobid_tx
 	delete ga_log where cast(job_id as nvarchar(50))=@jobid_tx;
