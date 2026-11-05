@@ -25,9 +25,8 @@ exec [dbo].[cleanup_ga] @status = 'failed'
 
 select * from ga_config 
 
-select top 3 gs.*, gl.minut from ga_status gs 
-left join (select job_id,datediff(minute,min(ts),max(ts)) minut from ga_log group by job_id) gl 
-on gs.job_id = gl.job_id
+select top 3 gs.*, 
+convert(varchar(10),isnull(end_time,getdate())-start_time,114) duration from ga_status gs 
 order by start_time desc
 
 select top 100 * from ga_log order by ts desc
