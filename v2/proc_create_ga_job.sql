@@ -22,12 +22,21 @@ select top 1
 from ga_status 
 where job_name = @pjob_name and status_desc in ('init') order by start_time
 
-if @job_id is null or @est_count=0 or (@degree>0 and @async=0)
+if @job_id is null or (@degree>0 and @async=0)
 begin
 	print 'The requested job cannot be started'
 	print '@job_id='+cast(@job_id as varchar(50))+', @est_count='+cast(@est_count as varchar(10))
 	+', @degree='+cast(@degree as varchar(10))+', @async='+cast(@async as varchar(10))
 	update ga_status set status_desc = 'stopped', end_time=getdate()
+	where job_id = @job_id;
+	return;
+end
+
+if @job_id is not null and @est_count=0
+begin
+	print 'The requested job is empty'
+	print '@job_id='+cast(@job_id as varchar(50))+', @est_count='+cast(@est_count as varchar(10))
+	update ga_status set status_desc = 'completed', end_time=getdate()
 	where job_id = @job_id;
 	return;
 end
